@@ -279,8 +279,9 @@ class DataBaseSampler(object):
 
                 s_points_list.append(s_points)
 
+            # numpy 2.0 removed np.long; use int64 explicitly
             gt_labels = np.array([self.cat2label[s['name']] for s in sampled],
-                                 dtype=np.long)
+                                 dtype=np.int64)
 
             if ground_plane is not None:
                 xyz = sampled_gt_bboxes[:, :3]

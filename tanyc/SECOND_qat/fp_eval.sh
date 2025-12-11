@@ -7,7 +7,7 @@ SCRIPT_DIR=$(cd -- "$(dirname "$0")" && pwd)
 REPO_DIR=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
 
 DEFAULT_CONFIG="${SCRIPT_DIR}/configs/second_hv_secfpn_8xb6-80e_kitti-3d-car.py"
-DEFAULT_CKPT="${SCRIPT_DIR}/pretrained/second_hv_secfpn_8xb6-80e_kitti-3d-car-75d9305e.pth"
+DEFAULT_CKPT="work_dirs/SECOND_qat/pretarined/second_hv_secfpn_8xb6-80e_kitti-3d-car-75d9305e.pth"
 
 # Activate the designated Conda environment if it is available.
 if [[ -z "${CONDA_DEFAULT_ENV:-}" || "${CONDA_DEFAULT_ENV}" != "openmmlab" ]]; then
@@ -45,7 +45,7 @@ if [[ ! -f "$CHECKPOINT" ]]; then
     exit 1
 fi
 
-VISIBLE_GPUS=${VISIBLE_GPUS:-"4,5,6,7"}
+VISIBLE_GPUS=${VISIBLE_GPUS:-"5"}
 IFS=',' read -ra GPU_IDS <<< "$VISIBLE_GPUS"
 GPUS=${GPUS:-${#GPU_IDS[@]}}
 

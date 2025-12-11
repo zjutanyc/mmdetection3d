@@ -1,3 +1,5 @@
+# 个人文件夹守则
+
 
 ## git 工作流
 ```bash
@@ -25,4 +27,19 @@ git push origin project/xxx
 git checkout main
 git pull upstream main
 git checkout -b project/new_xxx
+```
+
+
+## 其他注意事项
+
+- 文件结构
+
+``` bash
+tanyc/
+└── XXX/
+    └── README.md   # 项目的说明文档
+
+work_dirs/          #过程大文件的存储
+└── XXX             # 与项目文件名相同
+
 ```

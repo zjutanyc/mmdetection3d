@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run distributed evaluation for SECOND FLOAT experiments using GPUs 4,5,6,7.
+# Run single-GPU evaluation for SECOND FLOAT experiments.
 set -euo pipefail
 
 # Ensure we operate from repository root even if invoked elsewhere.
@@ -21,19 +21,10 @@ if [[ -z "${CONDA_DEFAULT_ENV:-}" || "${CONDA_DEFAULT_ENV}" != "openmmlab" ]]; t
 fi
 
 # Allow zero-argument execution by falling back to the known config/ckpt.
-if [[ $# -gt 0 ]]; then
-    CONFIG=$1
-    shift
-else
-    CONFIG=$DEFAULT_CONFIG
-fi
-
-if [[ $# -gt 0 ]]; then
-    CHECKPOINT=$1
-    shift
-else
-    CHECKPOINT=$DEFAULT_CKPT
-fi
+CONFIG=${1:-$DEFAULT_CONFIG}
+CHECKPOINT=${2:-$DEFAULT_CKPT}
+shift $(( $# > 0 ? 1 : 0 ))
+shift $(( $# > 0 ? 1 : 0 ))
 
 if [[ ! -f "$CONFIG" ]]; then
     echo "[ERROR] Config not found: $CONFIG" >&2
@@ -46,27 +37,21 @@ if [[ ! -f "$CHECKPOINT" ]]; then
 fi
 
 VISIBLE_GPUS=${VISIBLE_GPUS:-"5"}
-IFS=',' read -ra GPU_IDS <<< "$VISIBLE_GPUS"
-GPUS=${GPUS:-${#GPU_IDS[@]}}
+
+# Embrace randomness: no fixed seeds, enable benchmark autotune, unset deterministic flags.
+export PYTHONHASHSEED=${PYTHONHASHSEED:-$RANDOM}
+unset CUBLAS_WORKSPACE_CONFIG
+export CUDNN_DETERMINISTIC=0
+export CUDNN_BENCHMARK=1
 
 export CUDA_VISIBLE_DEVICES="$VISIBLE_GPUS"
-NNODES=${NNODES:-1}
-NODE_RANK=${NODE_RANK:-0}
-PORT=${PORT:-29500}
-MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
 
 export PYTHONPATH="${REPO_DIR}":${PYTHONPATH:-}
 
 cd "$REPO_DIR"
 
-python -m torch.distributed.launch \
-    --nnodes=$NNODES \
-    --node_rank=$NODE_RANK \
-    --master_addr=$MASTER_ADDR \
-    --nproc_per_node=$GPUS \
-    --master_port=$PORT \
-    "${REPO_DIR}/tools/test.py" \
+python "${REPO_DIR}/tools/test.py" \
     "$CONFIG" \
     "$CHECKPOINT" \
-    --launcher pytorch \
+    --launcher none \
     "$@"

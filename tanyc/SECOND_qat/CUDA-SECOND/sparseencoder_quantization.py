@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: MIT
 #
 # Adapted for SECOND SparseEncoder (traveller59/spconv) quantization only.
-#
-# Only SparseEncoder is touched; rest of the model remains FP.
 
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -14,19 +12,17 @@ from pytorch_quantization import nn as quant_nn
 from pytorch_quantization.nn.modules import _utils
 from pytorch_quantization.tensor_quant import QuantDescriptor
 from absl import logging as quant_logging
+from tqdm import tqdm
 
 from cumm import tensorview as tv
 from spconv.core import ConvAlgo
 from spconv.pytorch.conv import SparseConvolution, SparseConvTensor
 import spconv.pytorch as spconv
-from tqdm import tqdm
 
 from mmdet3d.models.layers.sparse_block import SparseBasicBlock, replace_feature
 
 
 class QuantAdd(nn.Module, _utils.QuantInputMixin):
-    """Quantized residual add for SparseBasicBlock."""
-
     default_quant_desc_input = tensor_quant.QUANT_DESC_8BIT_PER_TENSOR
 
     def __init__(self):
@@ -38,8 +34,6 @@ class QuantAdd(nn.Module, _utils.QuantInputMixin):
 
 
 class SparseConvolutionQuant(SparseConvolution, _utils.QuantMixin):
-    """Quantized spconv module (per-tensor act, per-channel weights)."""
-
     default_quant_desc_input = QuantDescriptor(num_bits=8, calib_method="histogram")
     default_quant_desc_weight = tensor_quant.QUANT_DESC_8BIT_CONV2D_WEIGHT_PER_CHANNEL
 
@@ -95,7 +89,6 @@ class SparseConvolutionQuant(SparseConvolution, _utils.QuantMixin):
 
     def _quant(self, input: SparseConvTensor, add_input: Optional[SparseConvTensor]):
         def _maybe_replace_features(tensor: SparseConvTensor, feats: torch.Tensor):
-            # spconv v2 exposes replace_feature; fallback to direct assignment for safety.
             if hasattr(tensor, "replace_feature"):
                 tensor = tensor.replace_feature(feats)
             else:
@@ -128,11 +121,9 @@ class SparseConvolutionQuant(SparseConvolution, _utils.QuantMixin):
 
 
 def _clone_spconv_to_quant(nninstance: torch.nn.Module) -> SparseConvolutionQuant:
-    """Copy a pretrained spconv layer into the quantized wrapper without reinit."""
     quant_instance = SparseConvolutionQuant.__new__(SparseConvolutionQuant)
     for k, val in vars(nninstance).items():
         setattr(quant_instance, k, val)
-    # Init quantizers on the cloned instance
     SparseConvolutionQuant.__init__(
         quant_instance,
         nninstance.ndim,
@@ -156,7 +147,6 @@ def _clone_spconv_to_quant(nninstance: torch.nn.Module) -> SparseConvolutionQuan
         act_alpha=getattr(nninstance, "act_alpha", 0),
         act_beta=getattr(nninstance, "act_beta", 0),
     )
-    # Preserve trained weights
     quant_instance.weight = nninstance.weight
     quant_instance.bias = nninstance.bias
     quant_instance.training = nninstance.training
@@ -164,7 +154,6 @@ def _clone_spconv_to_quant(nninstance: torch.nn.Module) -> SparseConvolutionQuan
 
 
 def _patch_sparse_basic_block(block: SparseBasicBlock):
-    """Insert quantized add and patch the forward to use it."""
     if hasattr(block, "quant_add"):
         return
     block.quant_add = QuantAdd()
@@ -190,8 +179,6 @@ def _patch_sparse_basic_block(block: SparseBasicBlock):
 
 
 def quantize_sparse_encoder(module: torch.nn.Module):
-    """Replace spconv layers + residual adds under a SparseEncoder."""
-
     def replace_module(mod: torch.nn.Module):
         for name, child in list(mod.named_children()):
             replace_module(child)
@@ -204,12 +191,10 @@ def quantize_sparse_encoder(module: torch.nn.Module):
 
 
 def initialize():
-    """Set a quiet log level for pytorch-quantization."""
     quant_logging.set_verbosity(quant_logging.ERROR)
 
 
 def set_quantizer_fast(module: torch.nn.Module):
-    """Use torch.histogram calibrator for speed."""
     for _, m in module.named_modules():
         if isinstance(m, quant_nn.TensorQuantizer):
             if isinstance(m._calibrator, calib.HistogramCalibrator):
@@ -236,14 +221,7 @@ def calibrate_model(
     forward_step: Callable[[object], None],
     num_batch: int = 200,
 ):
-    """Collect stats then load amax for quantizers inside `module`.
-
-    Args:
-        module: module containing TensorQuantizers (SparseEncoder for SECOND).
-        dataloader: iterable of batches from training data.
-        forward_step: callable that runs a forward pass given one batch.
-        num_batch: number of batches to use for calibration.
-    """
+    """Collect stats then load amax for quantizers inside `module`."""
 
     def compute_amax(target: torch.nn.Module, **kwargs):
         for _, m in target.named_modules():
@@ -270,8 +248,6 @@ def calibrate_model(
 
 
 class disable_quantization:
-    """Context manager to toggle quantizers off (for export/inference prep)."""
-
     def __init__(self, module: torch.nn.Module):
         self.module = module
 
@@ -288,8 +264,6 @@ class disable_quantization:
 
 
 class enable_quantization:
-    """Context manager to ensure quantizers are enabled."""
-
     def __init__(self, module: torch.nn.Module):
         self.module = module
 
